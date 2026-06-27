@@ -1,4 +1,4 @@
-// server.js - CON CORS CORREGIDO
+// server.js - CON MANEJO DE ERRORES
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -9,38 +9,48 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ✅ CORS CONFIGURADO CORRECTAMENTE
+// ✅ CORS
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
+// ✅ JSON Parser con manejo de errores
+app.use(express.json({ strict: false }));
+app.use(express.urlencoded({ extended: true }));
+
+// ✅ Verificar que DATABASE_URL existe
+if (!process.env.DATABASE_URL) {
+    console.error('❌ ERROR: DATABASE_URL no está configurada en las variables de entorno');
+    console.log('⚠️  Por favor, configura DATABASE_URL en Railway');
+}
 
 // Conexión a la base de datos
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined
 });
 
 // ============================================
-// RUTAS DE AUTENTICACIÓN
+// RUTAS
 // ============================================
 
 // Registro
 app.post('/api/auth/register', async (req, res) => {
-    console.log('📝 Registro recibido:', req.body);
-    const { username, email, password } = req.body;
+    console.log('📝 Registro recibido');
+    console.log('📦 Body:', req.body);
     
-    if (!username || !email || !password) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'Faltan datos obligatorios' 
-        });
-    }
-
     try {
+        const { username, email, password } = req.body;
+        
+        if (!username || !email || !password) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Faltan datos: username, email, password' 
+            });
+        }
+
         const userCheck = await pool.query(
             'SELECT id FROM users WHERE email = $1 OR username = $2',
             [email, username]
@@ -66,27 +76,29 @@ app.post('/api/auth/register', async (req, res) => {
             user: result.rows[0] 
         });
     } catch (error) {
-        console.error('Error en registro:', error);
+        console.error('❌ Error en registro:', error);
         res.status(500).json({ 
             success: false, 
-            message: 'Error en el servidor.' 
+            message: 'Error en el servidor: ' + error.message
         });
     }
 });
 
 // Login
 app.post('/api/auth/login', async (req, res) => {
-    console.log('🔑 Login recibido:', req.body.email);
-    const { email, password } = req.body;
+    console.log('🔑 Login recibido');
+    console.log('📦 Body:', req.body);
     
-    if (!email || !password) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'Faltan email o contraseña.' 
-        });
-    }
-
     try {
+        const { email, password } = req.body;
+        
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Faltan email o contraseña.' 
+            });
+        }
+
         const result = await pool.query(
             'SELECT * FROM users WHERE email = $1',
             [email]
@@ -111,7 +123,7 @@ app.post('/api/auth/login', async (req, res) => {
 
         const token = jwt.sign(
             { userId: user.id, email: user.email, username: user.username },
-            process.env.JWT_SECRET,
+            process.env.JWT_SECRET || 'secret_key',
             { expiresIn: '24h' }
         );
 
@@ -125,7 +137,7 @@ app.post('/api/auth/login', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error en login:', error);
+        console.error('❌ Error en login:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Error en el servidor.' 
@@ -133,12 +145,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// ============================================
-// RUTAS DE PUNTUACIONES
-// ============================================
-
+// Top 10
 app.get('/api/scores/top', async (req, res) => {
-    console.log('🏆 Top 10 solicitado');
     try {
         const result = await pool.query(
             `SELECT u.username, hs.score, hs.wave, hs.achieved_at
@@ -149,11 +157,12 @@ app.get('/api/scores/top', async (req, res) => {
         );
         res.json({ success: true, data: result.rows });
     } catch (error) {
-        console.error('Error:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: 'Error en el servidor.' });
     }
 });
 
+// Guardar puntuación
 app.post('/api/scores/save', async (req, res) => {
     console.log('💾 Guardando puntuación:', req.body);
     const { username, score, wave, mode, duration_seconds } = req.body;
@@ -206,7 +215,7 @@ app.post('/api/scores/save', async (req, res) => {
             message: 'Puntuación guardada correctamente.' 
         });
     } catch (error) {
-        console.error('Error guardando puntuación:', error);
+        console.error('❌ Error guardando puntuación:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Error en el servidor.' 
@@ -215,7 +224,7 @@ app.post('/api/scores/save', async (req, res) => {
 });
 
 // ============================================
-// RUTA DE PRUEBA
+// RUTA PRINCIPAL
 // ============================================
 
 app.get('/', (req, res) => {
@@ -224,13 +233,12 @@ app.get('/', (req, res) => {
         version: '1.0.0',
         status: 'running',
         timestamp: new Date().toISOString(),
+        database: process.env.DATABASE_URL ? '✅ Conectado' : '❌ No configurado',
         endpoints: {
             register: 'POST /api/auth/register',
             login: 'POST /api/auth/login',
             topScores: 'GET /api/scores/top',
-            saveScore: 'POST /api/scores/save',
-            examQuestions: 'GET /api/exam/questions',
-            examAnswer: 'POST /api/exam/answer'
+            saveScore: 'POST /api/scores/save'
         }
     });
 });
@@ -240,6 +248,11 @@ app.get('/', (req, res) => {
 // ============================================
 
 const createTables = async () => {
+    if (!process.env.DATABASE_URL) {
+        console.log('⚠️  DATABASE_URL no configurada. No se crearán tablas.');
+        return;
+    }
+    
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
@@ -251,6 +264,8 @@ const createTables = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        console.log('✅ Tabla users creada');
+        
         await pool.query(`
             CREATE TABLE IF NOT EXISTS game_sessions (
                 id SERIAL PRIMARY KEY,
@@ -262,6 +277,8 @@ const createTables = async () => {
                 played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        console.log('✅ Tabla game_sessions creada');
+        
         await pool.query(`
             CREATE TABLE IF NOT EXISTS high_scores (
                 id SERIAL PRIMARY KEY,
@@ -271,6 +288,8 @@ const createTables = async () => {
                 achieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        console.log('✅ Tabla high_scores creada');
+        
         await pool.query(`
             CREATE TABLE IF NOT EXISTS exam_answers (
                 id SERIAL PRIMARY KEY,
@@ -280,9 +299,11 @@ const createTables = async () => {
                 answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Tablas creadas/verificadas');
+        console.log('✅ Tabla exam_answers creada');
+        
+        console.log('✅ Todas las tablas creadas/verificadas');
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Error creando tablas:', error.message);
     }
 };
 
@@ -292,5 +313,6 @@ const createTables = async () => {
 
 app.listen(port, async () => {
     console.log(`🚀 Servidor en puerto ${port}`);
+    console.log(`🌐 URL: http://localhost:${port}`);
     await createTables();
 });
