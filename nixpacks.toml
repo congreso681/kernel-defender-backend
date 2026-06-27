@@ -1,0 +1,12 @@
+# nixpacks.toml
+[phases.setup]
+nixPkgs = ["nodejs_18"]
+
+[phases.install]
+cmds = ["npm install --production=false"]
+
+[phases.build]
+cmds = []
+
+[phases.start]
+cmd = "node server.js"
