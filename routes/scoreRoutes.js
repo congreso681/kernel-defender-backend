@@ -38,8 +38,7 @@ router.post('/save', authenticateToken, async (req, res) => {
             [userId, mode, score, wave, duration_seconds]
         );
 
-        // 2. Guardar en la tabla de High Scores (si es mayor que la existente)
-        // Usamos una consulta UPSERT (INSERT ... ON CONFLICT DO UPDATE)
+        // 2. Guardar en la tabla de High Scores
         await pool.query(
             `INSERT INTO high_scores (user_id, score, wave)
              VALUES ($1, $2, $3)
@@ -62,7 +61,6 @@ router.post('/save', authenticateToken, async (req, res) => {
 router.get('/user-stats', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     try {
-        // Obtener estadísticas agregadas de game_sessions
         const statsResult = await pool.query(
             `SELECT
                 COUNT(*) AS total_games,
@@ -74,7 +72,6 @@ router.get('/user-stats', authenticateToken, async (req, res) => {
             [userId]
         );
 
-        // Obtener la puntuación más alta registrada (high_scores)
         const highScoreResult = await pool.query(
             `SELECT score, wave, achieved_at
              FROM high_scores
@@ -95,4 +92,5 @@ router.get('/user-stats', authenticateToken, async (req, res) => {
     }
 });
 
+// ⬇️ ¡ESTA LÍNEA ES CRÍTICA!
 module.exports = router;

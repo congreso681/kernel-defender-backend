@@ -2,7 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const pool = require('./db/connection'); // Para inicializar la conexión
+const pool = require('./db/connection');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,12 +21,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/scores', scoreRoutes);
 app.use('/api/exam', examRoutes);
 
-// Ruta de prueba para verificar que el servidor funciona
+// Ruta de prueba
 app.get('/', (req, res) => {
     res.json({ message: 'Kernel Defender API - Online!' });
 });
 
-// Función para crear las tablas en la base de datos al iniciar
+// Función para crear tablas
 const createTables = async () => {
     try {
         await pool.query(`
@@ -68,14 +68,14 @@ const createTables = async () => {
                 answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('Tablas creadas/verificadas exitosamente.');
+        console.log('✅ Tablas creadas/verificadas exitosamente.');
     } catch (error) {
-        console.error('Error creando tablas:', error);
+        console.error('❌ Error creando tablas:', error);
     }
 };
 
 // Iniciar servidor
 app.listen(port, async () => {
-    console.log(`Servidor de Kernel Defender escuchando en el puerto ${port}`);
-    await createTables(); // Crear las tablas al iniciar el servidor
+    console.log(`🚀 Servidor de Kernel Defender escuchando en el puerto ${port}`);
+    await createTables();
 });

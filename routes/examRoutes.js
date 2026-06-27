@@ -4,13 +4,8 @@ const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
 const router = express.Router();
 
-// Aquí podrías tener un banco de preguntas fijo en el servidor, o en la BD.
-// Por simplicidad, lo dejamos como un array en el código, pero el frontend ya tiene sus propias preguntas.
-// Este endpoint es opcional si el frontend ya maneja las preguntas.
+// Obtener preguntas (opcional)
 router.get('/questions', (req, res) => {
-    // Puedes devolver el mismo banco de preguntas que usas en el frontend.
-    // O mejor, no usar este endpoint y que el frontend sea quien gestione las preguntas,
-    // y solo uses este para guardar las respuestas.
     res.json({ success: true, message: 'Las preguntas se manejan desde el frontend.' });
 });
 
@@ -62,4 +57,5 @@ router.get('/accuracy', authenticateToken, async (req, res) => {
     }
 });
 
+// ⬇️ ¡ESTA LÍNEA ES CRÍTICA!
 module.exports = router;
