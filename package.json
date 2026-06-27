@@ -15,5 +15,8 @@
     "bcrypt": "^5.1.0",
     "jsonwebtoken": "^9.0.0",
     "firebase-admin": "^11.8.0"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
