@@ -1,4 +1,4 @@
-// server.js - VERSIÓN COMPLETA CON RUTAS INLINE
+// server.js - CON CORS CORREGIDO
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -9,8 +9,13 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middlewares
-app.use(cors());
+// ✅ CORS CONFIGURADO CORRECTAMENTE
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Conexión a la base de datos
@@ -23,19 +28,19 @@ const pool = new Pool({
 // RUTAS DE AUTENTICACIÓN
 // ============================================
 
-// Registro de usuario
+// Registro
 app.post('/api/auth/register', async (req, res) => {
+    console.log('📝 Registro recibido:', req.body);
     const { username, email, password } = req.body;
     
     if (!username || !email || !password) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Faltan datos obligatorios: username, email, password' 
+            message: 'Faltan datos obligatorios' 
         });
     }
 
     try {
-        // Verificar si el usuario ya existe
         const userCheck = await pool.query(
             'SELECT id FROM users WHERE email = $1 OR username = $2',
             [email, username]
@@ -48,10 +53,7 @@ app.post('/api/auth/register', async (req, res) => {
             });
         }
 
-        // Hashear contraseña
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Insertar usuario
         const result = await pool.query(
             `INSERT INTO users (username, email, password_hash) 
              VALUES ($1, $2, $3) 
@@ -72,8 +74,9 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-// Login de usuario
+// Login
 app.post('/api/auth/login', async (req, res) => {
+    console.log('🔑 Login recibido:', req.body.email);
     const { email, password } = req.body;
     
     if (!email || !password) {
@@ -106,7 +109,6 @@ app.post('/api/auth/login', async (req, res) => {
             });
         }
 
-        // Generar JWT
         const token = jwt.sign(
             { userId: user.id, email: user.email, username: user.username },
             process.env.JWT_SECRET,
@@ -135,8 +137,8 @@ app.post('/api/auth/login', async (req, res) => {
 // RUTAS DE PUNTUACIONES
 // ============================================
 
-// Obtener Top 10
 app.get('/api/scores/top', async (req, res) => {
+    console.log('🏆 Top 10 solicitado');
     try {
         const result = await pool.query(
             `SELECT u.username, hs.score, hs.wave, hs.achieved_at
@@ -147,16 +149,13 @@ app.get('/api/scores/top', async (req, res) => {
         );
         res.json({ success: true, data: result.rows });
     } catch (error) {
-        console.error('Error obteniendo top scores:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Error en el servidor.' 
-        });
+        console.error('Error:', error);
+        res.status(500).json({ success: false, message: 'Error en el servidor.' });
     }
 });
 
-// Guardar puntuación
 app.post('/api/scores/save', async (req, res) => {
+    console.log('💾 Guardando puntuación:', req.body);
     const { username, score, wave, mode, duration_seconds } = req.body;
     
     if (!score) {
@@ -167,7 +166,6 @@ app.post('/api/scores/save', async (req, res) => {
     }
 
     try {
-        // Buscar o crear usuario
         let userResult = await pool.query(
             'SELECT id FROM users WHERE username = $1',
             [username || 'anonymous']
@@ -186,14 +184,12 @@ app.post('/api/scores/save', async (req, res) => {
             userId = userResult.rows[0].id;
         }
 
-        // Guardar sesión de juego
         await pool.query(
             `INSERT INTO game_sessions (user_id, mode, score, wave, duration_seconds)
              VALUES ($1, $2, $3, $4, $5)`,
             [userId, mode || 'manual', score, wave || 1, duration_seconds || 0]
         );
 
-        // Actualizar high scores
         await pool.query(
             `INSERT INTO high_scores (user_id, score, wave)
              VALUES ($1, $2, $3)
@@ -219,58 +215,6 @@ app.post('/api/scores/save', async (req, res) => {
 });
 
 // ============================================
-// RUTAS DE EXAMEN
-// ============================================
-
-app.get('/api/exam/questions', (req, res) => {
-    res.json({ 
-        success: true, 
-        message: 'Las preguntas se manejan desde el frontend.' 
-    });
-});
-
-app.post('/api/exam/answer', async (req, res) => {
-    const { username, questionId, correct } = req.body;
-    
-    try {
-        let userResult = await pool.query(
-            'SELECT id FROM users WHERE username = $1',
-            [username || 'anonymous']
-        );
-        
-        let userId;
-        if (userResult.rows.length === 0) {
-            const newUser = await pool.query(
-                `INSERT INTO users (username, email) 
-                 VALUES ($1, $2) 
-                 RETURNING id`,
-                [username || 'anonymous', `${username || 'anonymous'}@temp.com`]
-            );
-            userId = newUser.rows[0].id;
-        } else {
-            userId = userResult.rows[0].id;
-        }
-
-        await pool.query(
-            `INSERT INTO exam_answers (user_id, question_id, correct) 
-             VALUES ($1, $2, $3)`,
-            [userId, questionId, correct]
-        );
-        
-        res.json({ 
-            success: true, 
-            message: 'Respuesta registrada.' 
-        });
-    } catch (error) {
-        console.error('Error guardando respuesta de examen:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Error en el servidor.' 
-        });
-    }
-});
-
-// ============================================
 // RUTA DE PRUEBA
 // ============================================
 
@@ -281,18 +225,18 @@ app.get('/', (req, res) => {
         status: 'running',
         timestamp: new Date().toISOString(),
         endpoints: {
-            register: 'POST /api/auth/register {username, email, password}',
-            login: 'POST /api/auth/login {email, password}',
+            register: 'POST /api/auth/register',
+            login: 'POST /api/auth/login',
             topScores: 'GET /api/scores/top',
-            saveScore: 'POST /api/scores/save {username, score, wave, mode}',
+            saveScore: 'POST /api/scores/save',
             examQuestions: 'GET /api/exam/questions',
-            examAnswer: 'POST /api/exam/answer {username, questionId, correct}'
+            examAnswer: 'POST /api/exam/answer'
         }
     });
 });
 
 // ============================================
-// CREAR TABLAS EN LA BASE DE DATOS
+// CREAR TABLAS
 // ============================================
 
 const createTables = async () => {
@@ -307,8 +251,6 @@ const createTables = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Tabla users creada/verificada');
-
         await pool.query(`
             CREATE TABLE IF NOT EXISTS game_sessions (
                 id SERIAL PRIMARY KEY,
@@ -320,8 +262,6 @@ const createTables = async () => {
                 played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Tabla game_sessions creada/verificada');
-
         await pool.query(`
             CREATE TABLE IF NOT EXISTS high_scores (
                 id SERIAL PRIMARY KEY,
@@ -331,8 +271,6 @@ const createTables = async () => {
                 achieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Tabla high_scores creada/verificada');
-
         await pool.query(`
             CREATE TABLE IF NOT EXISTS exam_answers (
                 id SERIAL PRIMARY KEY,
@@ -342,11 +280,9 @@ const createTables = async () => {
                 answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Tabla exam_answers creada/verificada');
-
-        console.log('✅ Todas las tablas creadas/verificadas exitosamente.');
+        console.log('✅ Tablas creadas/verificadas');
     } catch (error) {
-        console.error('❌ Error creando tablas:', error);
+        console.error('❌ Error:', error);
     }
 };
 
@@ -355,8 +291,6 @@ const createTables = async () => {
 // ============================================
 
 app.listen(port, async () => {
-    console.log(`🚀 Servidor de Kernel Defender escuchando en el puerto ${port}`);
-    console.log(`🌐 URL: http://localhost:${port}`);
+    console.log(`🚀 Servidor en puerto ${port}`);
     await createTables();
-    console.log('✅ Servidor listo para recibir peticiones');
 });
